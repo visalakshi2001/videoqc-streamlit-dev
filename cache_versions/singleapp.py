@@ -22,7 +22,14 @@ def single_processing():
         with st.columns([2,2])[0]:
             st.video(uploaded)
         
-        data = run_video_qc_tests(uploaded)
+        # read uploaded file
+        st.session_state["vid_name"] = uploaded.name
+        
+        tfile = tempfile.NamedTemporaryFile(delete=False)
+        tfile.write(uploaded.read())
+        
+
+        data = run_video_qc_test_single(tfile.name)
         
         buffer = io.BytesIO()
         with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
@@ -51,9 +58,10 @@ def insert_data(dataframe,  duration,  qc_pnt, type, remarks=""):
     project_name = st.session_state["project_path"].split("/")[-1].split("\\")[-1]
     qc_dev= st.session_state["qc_dev_mem"]
     qc_mem= st.session_state["qc_mem_name"]
-    topic_name= st.session_state["session_name"]
-    path = os.path.join(st.session_state["project_path"], f"02_Animation", st.session_state['session_name'])
+    topic_name= st.session_state["vid_name"]
+    path = os.path.join(st.session_state["project_path"], r"02_Animation", st.session_state["session_name"])
 
+    print(path)
     dataframe.loc[len(dataframe)] = [project_name, topic_name, duration, qc_dev, qc_mem,
                                      datetime.today().strftime("%d-%m-%Y"), qc_pnt, type, remarks, path]
     
@@ -61,12 +69,11 @@ def insert_data(dataframe,  duration,  qc_pnt, type, remarks=""):
 
 # https://docs.streamlit.io/library/advanced-features/st.cache
 @st.cache(suppress_st_warning=True)
-def run_video_qc_tests(input_video):
-    tfile = tempfile.NamedTemporaryFile(delete=False)
-    tfile.write(input_video.read())
+def run_video_qc_test_single(input_video):
     
+    # extract 
     with st.spinner("🧩 Parsing video frames..."):
-        extract_frames_main(tfile.name)
+        extract_frames_main(input_video)
     
     st.write("Parsing complete, running test cases:")
 
