@@ -4,10 +4,11 @@ import cv2
 import numpy as np
 from keras.layers import Conv2D, Dense, MaxPooling2D, Input, Flatten, Dropout, Activation, BatchNormalization, Add
 from keras import Model
+from keras.models import Sequential
 
 
 # ETHNICITY DETECTION
-def getModel(vesion=4):
+def getEthModel(vesion=4):
     
     inp = Input(shape=(200, 200, 3,))
 
@@ -71,7 +72,7 @@ def rev_labels(pred):
         return 'others'
 
 def predict_ethnicity_from_image(img_inp):
-    model = getModel()
+    model = getEthModel()
     model.load_weights("models/4_29.h5")
 
     image = cv2.imread(img_inp)
@@ -125,9 +126,27 @@ from keras.models import load_model
 import tensorflow as tf
 
 # FONT DETECTION
-def get_font_type(img_inp):
-    model = load_model("models/fontclassifier.h5", compile=False)
+def getFontModel():
+    model = Sequential()
+    model.add(Conv2D(16, (3,3), 1, activation='relu', input_shape=(256,256,3)))
+    model.add(MaxPooling2D())
+    model.add(Conv2D(32, (3,3), 1, activation='relu'))
+    model.add(MaxPooling2D())
+    model.add(Conv2D(16, (3,3), 1, activation='relu'))
+    model.add(MaxPooling2D())
+    model.add(Flatten())
+    model.add(Dense(256, activation='relu'))
+    model.add(Dense(1, activation='sigmoid'))
+
     model.compile('adam', loss=tf.losses.BinaryCrossentropy(), metrics=['accuracy'])
+
+    return model
+
+# FONT DETECTION
+def get_font_type(img_inp):
+    # model = load_model("models/fontclassifier.h5", compile=False)
+    model = getFontModel()
+    model.load_weights("models/fontclassifierweights.hdf5")
     
     image = cv2.imread(img_inp)
 
