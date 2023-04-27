@@ -130,6 +130,7 @@ urllib3==1.26.14
 validators==0.20.0
 wasabi==0.10.1
 watchdog==2.3.1
+whisper @ git+https://github.com/openai/whisper.git@8cf36f3508c9acd341a45eb2364239a3d81458b9
 Werkzeug==2.2.3
 wrapt==1.12.1
 XlsxWriter==3.0.8

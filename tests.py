@@ -72,7 +72,7 @@ def rev_labels(pred):
 
 def predict_ethnicity_from_image(img_inp):
     model = getModel()
-    model.load_weights("../Ethnicity Classification/4_29.h5")
+    model.load_weights("models/4_29.h5")
 
     image = cv2.imread(img_inp)
 
@@ -99,7 +99,7 @@ from ultralytics import YOLO
 
 # LOGO DETECTION
 def detect_logo_position(img_inp):
-    logo_detector = YOLO("../Object Detection/logo-detection-code/best.pt")
+    logo_detector = YOLO("models/best.pt")
 
     RES = (720, 1280)
     BOX = (120, 180)
@@ -126,7 +126,7 @@ import tensorflow as tf
 
 # FONT DETECTION
 def get_font_type(img_inp):
-    model = load_model("../Font Recognizer/fontclassifier.h5", compile=False)
+    model = load_model("models/fontclassifier.h5", compile=False)
     model.compile('adam', loss=tf.losses.BinaryCrossentropy(), metrics=['accuracy'])
     
     image = cv2.imread(img_inp)

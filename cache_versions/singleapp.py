@@ -87,7 +87,7 @@ def run_video_qc_test_single(input_video):
             diff, conf = detect_logo_position(frame)
             st.write(f"Logo detected: confidence score {conf.item()}")
             if abs(diff) < 4:
-                st.success("Logo position is standard")
+                st.info("Logo position is standard")
             else:
                 st.warning("Logo position is Off (not standard)")
                 data = insert_data(data, duration=timestamp, qc_pnt="Logo off", type="Visual", remarks=f"logo off by {diff}")
@@ -95,7 +95,7 @@ def run_video_qc_test_single(input_video):
 
             with st.spinner("Testing Audio Quality..."):
                 acc, power = predict_accent(input_video)
-            st.success(f"The detected Voice over accent is {acc}, with intensity {power}")
+            st.info(f"The detected Voice over accent is {acc}, with intensity {power}")
             if acc != "indian":
                 data = insert_data(data, duration=timestamp, qc_pnt=f"Accent is {acc}",type="VO", remarks=f"intensity is {power}")
                 # data.loc[len(data)] = [timestamp, f"Accent is {acc}", f"intensity is {power}"]

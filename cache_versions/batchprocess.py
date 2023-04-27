@@ -13,8 +13,9 @@ from tests import detect_logo_position, predict_ethnicity_from_image, get_font_t
 from cache_versions.singleapp import run_video_qc_test_single
 
 def batch_processing():
-    
-    st.write(st.session_state)
+
+    # # to view the progress of app
+    # st.write(st.session_state)
 
     st.markdown("<center><h3>Batch Video Processing</h3></center>", unsafe_allow_html=True)
     
@@ -48,6 +49,8 @@ def batch_processing():
         st.session_state["flag"] = 0
     if "hash" not in st.session_state:
         st.session_state["hash"] = {}
+    if "checkpoint" not in st.session_state:
+        st.session_state["checkpoint"] = pd.DataFrame()
     
     flag = st.session_state["flag"]
 
@@ -63,39 +66,44 @@ def batch_processing():
         topic_path = topic.split("\\")[-1]
         st.session_state["session_name"] = topic_path
         time.sleep(2)
+
+        if stop:
+            df = st.session_state["checkpoint"]
+            print("Stopping")
+            st.session_state["stop"] = stop
+            st.session_state["start"] = False
+
+            buffer = io.BytesIO()
+            with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+                # Write each dataframe to a different worksheet.
+                df.to_excel(writer, sheet_name='QCSheet1')
+
+                # Close the Pandas Excel writer and output the Excel file to the buffer
+                writer.save()
+
+                st.download_button(
+                label="Download Excel QCSheet",
+                data=buffer,
+                file_name="qcreport.xlsx",
+                mime="application/vnd.ms-excel"
+                )
+
+            break
+        # else inner loop continues. no break statement inside inner loop, 
+        # as app resets after stop button press
         for video in glob(topic + "/*.mp4"):
             vid_name = video.split("\\")[-1].split(".mp4")[0]
             st.session_state["vid_name"] = vid_name
 
-            st.write(video, "Is being parsed")
-            df.append(run_video_qc_test_single(video))
+            st.success("📂📁", video, "Is being parsed... ⏬")
+            
+            ##########################
 
-            if stop:
-                print("Stopping")
-                st.session_state["stop"] = stop
-                st.session_state["start"] = False
-
-                buffer = io.BytesIO()
-                with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-                    # Write each dataframe to a different worksheet.
-                    df.to_excel(writer, sheet_name='QCSheet1')
-
-                    # Close the Pandas Excel writer and output the Excel file to the buffer
-                    writer.save()
-
-                    st.download_button(
-                    label="Download Excel QCSheet",
-                    data=buffer,
-                    file_name="qcreport.xlsx",
-                    mime="application/vnd.ms-excel"
-                    )
-
-                break
+            # run qc test on video and feed into dataframe
+            df = df.append(run_video_qc_test_single(video)).reset_index(drop=True)
 
             data[f"{flag}"] = video
-
-            
-
+            st.session_state["checkpoint"] = df
 
             flag += 1
             st.session_state["flag"] = flag
@@ -105,20 +113,22 @@ def batch_processing():
             time.sleep(5)
     
     # after executing all videos, save qc sheet
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-        # Write each dataframe to a different worksheet.
-        df.to_excel(writer, sheet_name='QCSheet1')
+    if not stop: 
+        df = st.session_state["checkpoint"]
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+            # Write each dataframe to a different worksheet.
+            df.to_excel(writer, sheet_name='QCSheet1')
 
-        # Close the Pandas Excel writer and output the Excel file to the buffer
-        writer.save()
+            # Close the Pandas Excel writer and output the Excel file to the buffer
+            writer.save()
 
-        st.download_button(
-        label="Download Excel QCSheet",
-        data=buffer,
-        file_name="qcreport.xlsx",
-        mime="application/vnd.ms-excel"
-        )
+            st.download_button(
+            label="Download Excel QCSheet",
+            data=buffer,
+            file_name="qcreport.xlsx",
+            mime="application/vnd.ms-excel"
+            )
 
     return stop
 

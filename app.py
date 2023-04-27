@@ -1,12 +1,16 @@
 import streamlit as st
 import pandas as pd
 from cache_versions.singleapp import single_processing
-from cache_versions.batchprocess import batch_processing
+# from cache_versions.batchprocess import batch_processing
+from cache_versions.batchprocessupload import batch_processing
 from cache_versions.settings import settings
 from cache_versions.audioprocess import audio_processing
 
 st.set_page_config(page_title="VideoQC",
-                   page_icon="🎬", layout="wide")
+                   page_icon="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f3ac.png",
+                #    page_icon = "🎬",
+                   layout="wide",
+                   )
 
 
 def start_app(pages: list, page: str):
