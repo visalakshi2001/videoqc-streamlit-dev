@@ -1,11 +1,14 @@
 # en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-2.3.1/en_core_web_sm-2.3.1.tar.gz
 # gramformer @ git+https://github.com/PrithivirajDamodaran/Gramformer.git@23425cd2e98a919384cab6156af8adf1c9d0639a
-Jinja2==3.1.2
+# Jinja2==3.1.2
 keras==2.8.0
 mtcnn==0.1.1
 
 opencv-python==4.7.0.72
 openpyxl==3.1.1
+
+pydub==0.25.1
+librosa>=0.10.0
 # spacy==2.3.9
 stqdm==0.0.5
 streamlit==1.12.0
@@ -16,4 +19,5 @@ torchvision==0.14.1
 transformers==4.27.4
 ultralytics==8.0.51
 whisper @ git+https://github.com/openai/whisper.git@8cf36f3508c9acd341a45eb2364239a3d81458b9
-Werkzeug==2.2.3
+# Werkzeug==2.2.3
+XlsxWriter==3.0.8

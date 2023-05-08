@@ -165,18 +165,63 @@ def get_font_type(img_inp):
     return pred
 
 # ACCENT CLASSIFICATION
-import time
-import random
+from collections import Counter
+import librosa
+from pydub import AudioSegment
+import os
+
+DEBUG = True
+SILENCE_THRESHOLD = .01
+RATE = 24000
+N_MFCC = 13
+COL_SIZE = 30
+EPOCHS = 10 #35#250
+LANG_DICT = {'india': 0, 'uk': 1, 'usa': 2}
+
+# ACCENT CLASSIFICATION
+def to_mfcc(wav):
+    '''
+    Converts wav file to Mel Frequency Ceptral Coefficients
+    :param wav (numpy array): Wav form
+    :return (2d numpy array: MFCC
+    '''
+    return(librosa.feature.mfcc(y=wav, sr=RATE, n_mfcc=N_MFCC))
+
+def segment_one(mfcc):
+    '''
+    Creates segments from one mfcc image. If last segments is not long enough to be length of columns divided by COL_SIZE
+    :param mfcc (numpy array): MFCC array
+    :return (numpy array): Segmented MFCC array
+    '''
+    segments = []
+    for start in range(0, int(mfcc.shape[1] / COL_SIZE)):
+        segments.append(mfcc[:, start * COL_SIZE:(start + 1) * COL_SIZE])
+    return(np.array(segments))
+
+def rev_conv_labels(pred, label_dict):
+    return list(label_dict.keys())[list(label_dict.values()).index(pred)]
 
 # ACCENT CLASSIFICATION
 def predict_accent(video_inp):
 
-    time.sleep(10)
+    # if video_inp.endswith(".mp4"):
+    #     mp4_ext = AudioSegment.from_file(video_inp, "mp4")
+    #     extracted_audio = os.path.join(os.getcwd(), "audioextract.mp3")
+    #     mp4_ext.export(extracted_audio, "mp3")
 
-    opts = ["indian", "uk"]
+    series, sr = librosa.load(video_inp)
+    series = librosa.core.resample(y=series,orig_sr=sr,target_sr=RATE, scale=True)
+    mfcc = to_mfcc(series)
+    segment = segment_one(mfcc)
 
-    accent = random.choice(opts)
+    model = load_model("models/accent_model_valacc40.h5")
 
-    intensity = random.uniform(0.2, 0.95)
+    y_hat = model.predict(segment)
+    
+    pred = Counter(np.argmax(y_hat, axis=1)).most_common(1)[0][0]
+    intensity = Counter(np.argmax(y_hat, axis=1)).most_common(1)[0][1]
 
-    return (accent, intensity)
+    accent = rev_conv_labels(pred, LANG_DICT)
+    
+    return(accent, intensity/len(y_hat))
+

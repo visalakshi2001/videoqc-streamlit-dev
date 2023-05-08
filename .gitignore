@@ -2,5 +2,6 @@ __pycache__/
 02_Animation/*
 Development/*
 videoqc/*
-# models/*
+models/*
 *.zip
+image_frames/*

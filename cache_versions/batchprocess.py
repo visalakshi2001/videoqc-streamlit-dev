@@ -15,7 +15,7 @@ from cache_versions.singleapp import run_video_qc_test_single
 def batch_processing():
 
     # # to view the progress of app
-    # st.write(st.session_state)
+    st.write(st.session_state)
 
     st.markdown("<center><h3>Batch Video Processing</h3></center>", unsafe_allow_html=True)
     
@@ -40,11 +40,14 @@ def batch_processing():
             st.text(f"{name} : {os.listdir(topic)}")
             
 
-    st.success(f"Total topics to process: {len(topics)}")
+    st.warning(f"Total topics to process: {len(topics)}")
     # total_t = st.empty()
 
     stop = st.button("Stop Exec")
-    print("stob_btn above me")
+
+    if stop: 
+        st.warning("Stopping... Please wait until you see a DOWNLOAD BUTTON before pressing anything", icon="❗")
+    # print("stob_btn above me")
     if "flag" not in st.session_state:
         st.session_state["flag"] = 0
     if "hash" not in st.session_state:
@@ -62,10 +65,10 @@ def batch_processing():
     progressbar = st.progress(0)
     i=0
     for topic in topics:
-        st.success(topic)
+        st.success(topic, icon="📌")
         topic_path = topic.split("\\")[-1]
         st.session_state["session_name"] = topic_path
-        time.sleep(2)
+        # time.sleep(2)
 
         if stop:
             df = st.session_state["checkpoint"]
@@ -95,7 +98,7 @@ def batch_processing():
             vid_name = video.split("\\")[-1].split(".mp4")[0]
             st.session_state["vid_name"] = vid_name
 
-            st.success("📂📁", video, "Is being parsed... ⏬")
+            st.success("📂📁" + video + " Is being parsed... ⏬", icon="📢")
             
             ##########################
 
@@ -110,7 +113,7 @@ def batch_processing():
             st.session_state["hash"] = data
             progressbar.progress((i + 1)/len(glob(topic + "/*.mp4") * len(topics)))
             i = i+1
-            time.sleep(5)
+            # time.sleep(5)
     
     # after executing all videos, save qc sheet
     if not stop: 
@@ -131,69 +134,4 @@ def batch_processing():
             )
 
     return stop
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def run_qc_tests_start_stop():
-    
-            # this STQDM is stopping the start top execution after one run
-            # test it in playground before implementing it in the actual app
-            # https://discuss.streamlit.io/t/stqdm-a-tqdm-like-progress-bar-for-streamlit/10097?page=2
-#     for topic in stqdm(topics):
-#         print("inside topic loop")
-#         time.sleep(2)
-#         for i, video in stqdm(enumerate(glob(topic + "/*.mp4")), desc=f"{topic} under analysis..."):
-
-#             if stop:
-#                 print("Stopping")
-#                 st.session_state["stop"] = stop
-#                 st.session_state["start"] = False
-#                 break
-
-#             data[f"{flag}"] = video
-#             flag += 1
-#             st.session_state["flag"] = flag
-#             st.session_state["hash"] = data
-#             st.success(video)
-#             time.sleep(5)
-
-
-    # data = pd.read_excel("D:\Drive_A\TMLC\All around VideoQC\Development\qcreport.xlsx")
-    # buffer = io.BytesIO()
-    # with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
-    #     # Write each dataframe to a different worksheet.
-    #     data.to_excel(writer, sheet_name='QCSheet1')
-
-    #     # Close the Pandas Excel writer and output the Excel file to the buffer
-    #     writer.save()
-
-    #     st.download_button(
-    #     label="Download Excel QCSheet",
-    #     data=buffer,
-    #     file_name="qcreport.xlsx",
-    #     mime="application/vnd.ms-excel"
-    #     )
-
-    
-
 

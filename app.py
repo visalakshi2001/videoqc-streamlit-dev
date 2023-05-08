@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 from cache_versions.singleapp import single_processing
-# from cache_versions.batchprocess import batch_processing
-from cache_versions.batchprocessupload import batch_processing
+from cache_versions.batchprocess import batch_processing
+# from cache_versions.batchprocessupload import batch_processing
 from cache_versions.settings import settings
 from cache_versions.audioprocess import audio_processing
 
@@ -53,20 +53,20 @@ def start_app(pages: list, page: str):
 
 def sidebar(pages):
 
-
-    pageidx = st.session_state["page"]
+    if "page" not in st.session_state:
+        st.session_state["page"] = pages[1]
 
     with st.sidebar:
         
         st.title("Demo VideoQC for:")
         
-        page = st.radio("Select analysis", 
+        new_page = st.radio("Select analysis", 
                         options = pages,
-                        index=pageidx)
+                        index=1)
 
-        st.session_state["page"] = pages.index(page)
-        pageidx = st.session_state["page"]
-        page = pages[pageidx]
+        st.session_state["page"] = new_page
+    
+    page = st.session_state["page"]
 
     return page
 
@@ -122,9 +122,7 @@ def info_form(state=1):
 if __name__ == "__main__":
 
     pages = ["ScriptQC", "Single Video processing", "Batch processing", "AudioQC"]
-
-    if "page" not in st.session_state:
-        st.session_state["page"] = 1
+    
 
     page = sidebar(pages)
     start_app(pages, page)

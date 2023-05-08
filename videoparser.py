@@ -2,6 +2,7 @@ import os
 import cv2
 import numpy as np
 from datetime import timedelta
+from pathlib import Path
 
 def format_timedelta(td):
     """Utility function to format timedelta objects in a cool way (e.g 00:00:20.05) 
@@ -34,7 +35,7 @@ def extract_frames_main(video_file, storage_path:str = "./", SAVING_FRAMES_PER_S
         os.mkdir(storage_path) 
     
     if len(os.listdir(storage_path)) > 0:
-        return
+        [f.unlink() for f in Path(storage_path).glob("*") if f.is_file()]
     
     # read the video file    
     test_video = cv2.VideoCapture(video_file)
