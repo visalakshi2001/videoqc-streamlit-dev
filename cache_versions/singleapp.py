@@ -6,7 +6,9 @@ from datetime import datetime
 import pandas as pd
 import tempfile
 from videoparser import extract_frames_main
-from tests import detect_logo_position, predict_ethnicity_from_image, get_font_type, predict_accent
+from tests import (detect_logo_position, predict_ethnicity_from_image, 
+                    get_ost_font_type, predict_accent, get_audio_patchwork,
+                    get_audio_stats)
 
 
 
@@ -71,6 +73,11 @@ def insert_data(dataframe,  duration,  qc_pnt, type, remarks=""):
 @st.cache(suppress_st_warning=True)
 def run_video_qc_test_single(input_video):
     
+
+    result, complexity_scale, stat_dict = get_audio_stats(input_video)
+
+
+    
     # extract 
     with st.spinner("🧩 Parsing video frames..."):
         extract_frames_main(input_video)
@@ -79,6 +86,12 @@ def run_video_qc_test_single(input_video):
 
     data = pd.DataFrame(columns = ["Session No", "Topic Name", "Duration", "Developed by", "Reported by",
                                     "Date", "QCPoint", "Type", "remarks", "Path"])
+    
+    time_range = get_audio_patchwork(input_video)
+    
+    for start, end in zip(time_range.keys(), time_range.values()):
+        st.write(f"Audio unleveled from {start} to {end}")
+        data = insert_data(data, duration=start, qc_pnt="Audio unleveled", type="VO", remarks=f"Audio unleveled from {start} to {end}")
 
     for idx, frame in enumerate(glob("./image_frames/*.jpg")):
         timestamp = frame.split("\\")[-1].split(".jpg")[0].split("frame")[1]
@@ -103,7 +116,7 @@ def run_video_qc_test_single(input_video):
             
 
         ethnicity = predict_ethnicity_from_image(frame)
-        fonttype = get_font_type(frame)
+        fonttype = get_ost_font_type(frame)
 
         if len(ethnicity):
             ethnics = [eth["label"] for eth in ethnicity]

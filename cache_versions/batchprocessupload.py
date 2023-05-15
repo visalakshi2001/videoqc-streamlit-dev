@@ -10,7 +10,7 @@ from stqdm import stqdm
 from tqdm import tqdm
 import tempfile
 from videoparser import extract_frames_main
-from tests import detect_logo_position, predict_ethnicity_from_image, get_font_type, predict_accent
+from tests import detect_logo_position, predict_ethnicity_from_image, get_ost_font_type, predict_accent
 from cache_versions.singleapp import run_video_qc_test_single
 
 def batch_processing():

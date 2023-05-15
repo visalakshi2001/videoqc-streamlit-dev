@@ -13,10 +13,11 @@ def settings():
             videoqc = st.checkbox("Video", value=1)
             audioqc = st.checkbox("Audio", value=1)
         with qc_cols[1]:
-            get_transcript = st.checkbox("📋 Get transcript after QC")
+            get_transcript = st.checkbox("📋 Get transcript after QC", value = st.session_state["get_transcript"])
         
         applybtn = st.form_submit_button("Apply")
     
     if applybtn:
         st.write(videoqc, audioqc, get_transcript, frame_rate)
+        st.session_state["get_transcript"] = get_transcript
     return

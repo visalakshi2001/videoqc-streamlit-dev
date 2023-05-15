@@ -49,6 +49,8 @@ def start_app(pages: list, page: str):
             audio_processing()
     
     with setting_tab:
+        if "get_transcript" not in st.session_state:
+            st.session_state["get_transcript"] = False
         settings()
 
 def sidebar(pages):

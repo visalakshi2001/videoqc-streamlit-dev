@@ -1,3 +1,5 @@
+import streamlit as st
+
 # ETHNICITY DETECTION
 from mtcnn.mtcnn import MTCNN
 import cv2
@@ -73,7 +75,7 @@ def rev_labels(pred):
 
 def predict_ethnicity_from_image(img_inp):
     model = getEthModel()
-    model.load_weights("models/4_29.h5")
+    model.load_weights("models/ethnicity_model_4_29.h5")
 
     image = cv2.imread(img_inp)
 
@@ -100,7 +102,7 @@ from ultralytics import YOLO
 
 # LOGO DETECTION
 def detect_logo_position(img_inp):
-    logo_detector = YOLO("models/best.pt")
+    logo_detector = YOLO("models/logo_model.pt")
 
     RES = (720, 1280)
     BOX = (120, 180)
@@ -121,9 +123,10 @@ def detect_logo_position(img_inp):
 
     return sum(diff[0]).item(), confidence
 
-# FONT DETECTION
+# FONT AND OST DETECTION
 from keras.models import load_model
 import tensorflow as tf
+import pytesseract
 
 # FONT DETECTION
 def getFontModel():
@@ -142,27 +145,45 @@ def getFontModel():
 
     return model
 
-# FONT DETECTION
-def get_font_type(img_inp):
-    # model = load_model("models/fontclassifier.h5", compile=False)
-    model = getFontModel()
-    model.load_weights("models/fontclassifierweights.hdf5")
-    
+
+# FONT AND OST DETECTION
+def get_ost_font_type(img_inp):
+
+    # font_model = load_model("models/fontclassifier.h5", compile=False)
+    font_model = getFontModel()
+    font_model.load_weights("models/fontclassifierweights.hdf5")
+    ost_model = YOLO("models/ost_model.pt")
+
     image = cv2.imread(img_inp)
+    results = ost_model(image)
+    if len(results[0].boxes) > 0:
+        print("OST Detected")
+        boxes = results[0].boxes.xyxy
+        for box in boxes:
+            x1, y1, x2, y2 = [int(b) for b in box]
+            try:
+                pad = 50
+                ocr_text = pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
+            except:
+                pad = 0
+                ocr_text = pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
+        
+        image = tf.image.resize(image, [256, 256])
+        yhat = font_model.predict(np.expand_dims(image/255, 0))
 
-    image = tf.image.resize(image, [256, 256])
-    yhat = model.predict(np.expand_dims(image/255, 0))
+        print(img_inp, yhat)
 
-    print(img_inp, yhat)
+        pred = ""
+        if yhat >= 0.5:
+            pred = "segoeui"
+        elif yhat >= 0.3 and yhat < 0.5:
+            pred = "others"
+        else:
+            pred = "no OST"
+        
+        return (ocr_text, pred)
 
-    pred = ""
-    if yhat >= 0.5:
-        pred = "segoeui"
-    elif yhat >= 0.3 and yhat < 0.5:
-        pred = "others"
-    else:
-        pred = "no font"
-    return pred
+    return "no OST"
 
 # ACCENT CLASSIFICATION
 from collections import Counter
@@ -225,3 +246,135 @@ def predict_accent(video_inp):
     
     return(accent, intensity/len(y_hat))
 
+
+# PATCHWORK, LEVELS, BG MUSIC LEVEL
+import opensmile
+import datetime
+
+# PATCHWORK, LEVELS, BG MUSIC LEVEL
+def get_cross_corr(audio_file, segment_len = 1):
+    # Load the audio file
+    audio, sr = librosa.load(audio_file)
+
+    # Define segment length in seconds
+    segment_length = segment_len
+
+    # Divide the audio into segments
+    n_segments = len(audio) // (segment_length * sr)
+    segments = np.array_split(audio, n_segments)
+
+    # Extract OpenSMILE features for each segment
+    smile = opensmile.Smile(
+        feature_set=opensmile.FeatureSet.GeMAPSv01b,
+        feature_level=opensmile.FeatureLevel.Functionals,
+        num_channels=1,
+        )
+    feature_values = []
+    for segment in segments:
+        features = smile.process_signal(segment, sr)
+        feature_values.append(features)
+    feature_values = np.array(feature_values)
+
+    # Calculate cross-correlation between adjacent segments by taking the max of feature map correlation
+    max_corr_values = np.zeros(n_segments-1)
+    for i in range(n_segments-1):
+        corr = np.abs(np.correlate(feature_values[i][0], feature_values[i+1][0], mode='same'))
+        max_corr_values[i] = np.max(corr)
+    
+    # plot cross-correlation 
+    timestamps = np.arange(n_segments-1) * segment_length
+
+
+    return max_corr_values, timestamps
+
+def calculate_differences(corr_vals, end_second = 10):
+    differences = {}
+    
+    # Calculate differences between consecutive positions
+    for i in range(len(corr_vals) - 1):
+        diff = []
+        for j in range(1, end_second):
+            try:
+                diff.append(round(corr_vals[i + j] - corr_vals[i], 2))
+            except:
+                continue
+        differences[str(corr_vals[i])] = diff
+    
+    return differences
+
+def catch_timestamps(differences, corr_values, timestamps, threshold=0.11):
+    time_catch = {}
+    for i, corr_val in enumerate(corr_values):
+        if i == len(corr_values) -1 :
+            continue
+        # convert current timestamp to mm:ss format
+        t = str(datetime.timedelta(seconds=int(timestamps[i])))[-5:]
+
+        # capture differences that are >0.10 and note their timestamp in relative seconds difference (index value)
+        flags = [differences[str(corr_val)].index(diff) for diff in differences[str(corr_val)] if diff>=threshold]
+
+        time_catch[timestamps[i]] = flags
+    
+    time_range = {}
+    for start, ends in zip(time_catch.keys(), time_catch.values()):
+
+        if ends != []:
+            s = str(datetime.timedelta(seconds=int(start)))[-5:]
+            end = max(ends)
+            e = str(datetime.timedelta(seconds=int(start + end)))[-5:]
+            # print(s, "--", e)
+            time_range[s] = e
+    return time_range
+
+def get_audio_patchwork(video_inp):
+
+    corr_values, timestamp = get_cross_corr(video_inp, segment_len=2)
+
+    diffs = calculate_differences(corr_vals=corr_values)
+
+    time_range = catch_timestamps(differences=diffs, corr_values=corr_values, timestamps=timestamp)
+
+    return time_range
+
+# EXTRACT TRANSCRIPT
+import whisper
+import textstat
+import pandas as pd
+
+# EXTRACT TRANSCRIPT
+@st.cache(suppress_st_warning=True)
+def get_transcript_model(model=None):
+    if model is None:
+        whisper_model = whisper.load_model("tiny")
+    
+    return whisper_model
+
+def get_audio_stats(audio_file, model = None, transcribe=True, calculate=True):
+    
+    whisper_model = get_transcript_model()
+    print("Whisper model loaded..")
+
+    result = whisper_model.transcribe(audio_file)
+
+    if transcribe:
+        print("Transcripting and Saving script..")
+        with open(f"{st.session_state['vid_name']}_transcript.txt", "w+") as f:
+            f.write("Video: " + st.session_state["vid_name"])
+            f.write(result["text"])
+    
+    total_activity_time = 0
+    voice_activity_terms = []
+    complexity_scale = pd.DataFrame(columns=["start", "end", "text", "score"])
+    for segment in result["segments"]:
+        voice_activity_terms.extend(segment["text"].split())
+        total_activity_time += (segment["end"] - segment["start"])
+        complexity_scale.loc[len(complexity_scale)] = [segment["start"], segment["end"], segment["text"], textstat.dale_chall_readability_score(segment["text"])]
+
+    stat_dict = {
+        "Pace (WPM)": (len(voice_activity_terms)/total_activity_time)*60,
+        "Lexical Complexity Score": complexity_scale["score"].mean(),
+        "Complexity Level": textstat.text_standard(result["text"]),
+        "Difficult words": [textstat.difficult_words_list(result["text"])],
+    }
+
+    return result, complexity_scale, stat_dict
