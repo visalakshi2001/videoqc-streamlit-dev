@@ -10,6 +10,7 @@ from keras.models import Sequential
 
 
 # ETHNICITY DETECTION
+@st.cache(suppress_st_warning=True, allow_output_mutation=True)
 def getEthModel(vesion=4):
     
     inp = Input(shape=(200, 200, 3,))
@@ -58,8 +59,10 @@ def getEthModel(vesion=4):
     model = Model(inputs=[inp], outputs=[out])
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
+    model.load_weights("models/ethnicity_model_4_29.h5")
+    detector = MTCNN()
 
-    return model
+    return model, detector
 
 def rev_labels(pred):
     if pred == 0 :
@@ -74,28 +77,19 @@ def rev_labels(pred):
         return 'others'
 
 def predict_ethnicity_from_image(img_inp):
-    model = getEthModel()
-    model.load_weights("models/ethnicity_model_4_29.h5")
+    model, detector = getEthModel()
 
     image = cv2.imread(img_inp)
 
-    if image.shape == (200,200,3):
-        y_hat = model.predict(np.asarray([image]))
+    faces = detector.detect_faces(image)
+    for face in faces:
+        x, y, w, h = face["box"]
+        new_img = cv2.resize(image[y:y+h, x:x+w], (200,200))
+        y_hat = model.predict(np.asarray([new_img]))
         label = rev_labels(np.argmax(y_hat))
-        result_list = [{'box': [0, 0, 200, 200], 'label': label}]
-        # draw_image_with_boxes(img_path, result_list)
-        return result_list
-    else:
-        detector = MTCNN()
-        faces = detector.detect_faces(image)
-        for face in faces:
-            x, y, w, h = face["box"]
-            new_img = cv2.resize(image[y:y+h, x:x+w], (200,200))
-            y_hat = model.predict(np.asarray([new_img]))
-            label = rev_labels(np.argmax(y_hat))
-            face["label"] = label
-        # draw_image_with_boxes(img_path, faces)
-        return faces
+        face["label"] = label
+    # draw_image_with_boxes(img_path, faces)
+    return faces
 
 # LOGO DETECTION
 from ultralytics import YOLO
@@ -127,8 +121,88 @@ def detect_logo_position(img_inp):
 from keras.models import load_model
 import tensorflow as tf
 import pytesseract
+import spacy
+from spacy.matcher import Matcher
+from textblob import TextBlob
+import nltk
+from nltk.corpus import stopwords
+
+try:
+    nltk.data.find("tokenizers/punkt")
+except:
+    nltk.download("punkt")
+try:
+    nltk.data.find("corpora/wordnet")
+except:
+    nltk.download("wordnet")
+try:
+    nltk.data.find("corpora/stopwords")
+except:
+    nltk.download("stopwords")
+try:
+    nltk.data.find("taggers/averaged_perceptron_tagger")
+except:
+    nltk.download("averaged_perceptron_tagger")
+
+
+# TEXT CORRECTION AND ERROR DETECTION
+@st.cache(suppress_st_warning=True)
+def detect_text_error(ost):
+
+    status = {}
+
+    print("Checking voice of the sentence")
+    nlp = spacy.load("en_core_web_sm")
+    matcher = Matcher(nlp.vocab)
+    passive_rule = [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBN'}]
+    matcher.add('Passive', [passive_rule])
+
+    doc = nlp(ost)
+    matches = matcher(doc)
+    if len(matches) > 0:
+        status["voice"] = "Passive"
+    else:
+        status["voice"] = "Active"
+    
+    print("Checking spelling errors")
+    blob = TextBlob(ost.lower())
+    misspelled = set()
+    for word in blob.words:
+        if not word.spellcheck()[0][1] == 1.0:
+            misspelled.add(str(word))
+    if len(misspelled) > 0:
+        status["spelling"] = misspelled
+    else:
+        status["spelling"] = "Good"
+
+    print("Checking uppercase issues with prep and conj")
+    stops = set(stopwords.words("english"))
+    blob = TextBlob(ost)
+    status["hasuppersubord"] = False
+    for wordtag in blob.tags:
+        if not wordtag[1].startswith("N") and wordtag[0][0].isupper():
+            status["hasuppersubord"] = True
+    
+    print("Checking &")
+    if "&" in ost:
+        status["contains&"] = True
+    else:
+        status["contains&"] = False
+    
+    print("Checking for Orphan words")
+    if ost.split("\n")[-1] == ost.split("\n")[-1].split()[-1]:
+        status["orphan"] = True
+    else:
+        status["orphan"] = False
+    
+    print("Checking Sentence formation")
+
+    return status
+
+
 
 # FONT DETECTION
+@st.cache(suppress_st_warning=True, allow_output_mutation=True)
 def getFontModel():
     model = Sequential()
     model.add(Conv2D(16, (3,3), 1, activation='relu', input_shape=(256,256,3)))
@@ -143,6 +217,8 @@ def getFontModel():
 
     model.compile('adam', loss=tf.losses.BinaryCrossentropy(), metrics=['accuracy'])
 
+    model.load_weights("models/fontclassifierweights.hdf5")
+
     return model
 
 
@@ -151,7 +227,7 @@ def get_ost_font_type(img_inp):
 
     # font_model = load_model("models/fontclassifier.h5", compile=False)
     font_model = getFontModel()
-    font_model.load_weights("models/fontclassifierweights.hdf5")
+    
     ost_model = YOLO("models/ost_model.pt")
 
     image = cv2.imread(img_inp)
@@ -159,29 +235,40 @@ def get_ost_font_type(img_inp):
     if len(results[0].boxes) > 0:
         print("OST Detected")
         boxes = results[0].boxes.xyxy
+        ocr_text = ""
         for box in boxes:
             x1, y1, x2, y2 = [int(b) for b in box]
             try:
                 pad = 50
-                ocr_text = pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
+                ocr_text = ocr_text + " " + pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
+
             except:
                 pad = 0
-                ocr_text = pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
+                ocr_text = ocr_text + " " + pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
         
-        image = tf.image.resize(image, [256, 256])
-        yhat = font_model.predict(np.expand_dims(image/255, 0))
+        ocr_text = ocr_text.strip()
+        ocr_text = ocr_text.strip("\n")
+        ocr_text = ocr_text.rstrip("}{)(-").strip()
+        
+        if ocr_text != "":
+            status = detect_text_error(ocr_text)
+        
+            image = tf.image.resize(image, [256, 256])
+            yhat = font_model.predict(np.expand_dims(image/255, 0))
 
-        print(img_inp, yhat)
+            print(img_inp, yhat)
 
-        pred = ""
-        if yhat >= 0.5:
-            pred = "segoeui"
-        elif yhat >= 0.3 and yhat < 0.5:
-            pred = "others"
+            fonttype = ""
+            if yhat >= 0.5:
+                fonttype = "segoeui"
+            elif yhat >= 0.3 and yhat < 0.5:
+                fonttype = "others"
+            else:
+                return (ocr_text, "None, This is only BG Text", status)
+            
+            return (ocr_text, fonttype, status)
         else:
-            pred = "no OST"
-        
-        return (ocr_text, pred)
+            return "no OST"
 
     return "no OST"
 
@@ -197,7 +284,7 @@ RATE = 24000
 N_MFCC = 13
 COL_SIZE = 30
 EPOCHS = 10 #35#250
-LANG_DICT = {'india': 0, 'uk': 1, 'usa': 2}
+LANG_DICT = {'indian': 0, 'uk': 1, 'usa': 2}
 
 # ACCENT CLASSIFICATION
 def to_mfcc(wav):
@@ -247,12 +334,57 @@ def predict_accent(video_inp):
     return(accent, intensity/len(y_hat))
 
 
+
+# DETECT BGMUSIC AND BGNOISE
+def extract_features(audio_data):
+    series, sr = librosa.load(audio_data)
+    # Extract Mel-frequency cepstral coefficients (MFCCs)
+    mfccs = librosa.feature.mfcc(y=series, sr=sr, n_mfcc=40)
+    # Calculate the mean and standard deviation of each MFCC coefficient
+    mfccs_mean = np.mean(mfccs.T, axis=0)
+    mfccs_std = np.std(mfccs.T, axis=0)
+    return np.concatenate((mfccs_mean, mfccs_std), axis=0)
+
+def load_audio_models():
+    noise_model = load_model("models/noise.h5", compile=False)
+    bgm_model = load_model("models/bgm_classifier.h5", compile=False)
+
+    return noise_model, bgm_model
+
+# DETECT BGMUSIC AND BGNOISE
+def detect_noise_and_background(audio_file):
+    features = extract_features(audio_file)
+    
+    noise_model, bgm_model = load_audio_models()
+
+    features = np.expand_dims(features, axis=0)
+    features = np.expand_dims(features, axis=2)
+
+    # Use the trained model to make a prediction
+    has_noise = noise_model.predict(features)
+    has_bgm = bgm_model.predict(features)
+
+    BGM_LABELS = {
+    0: "bgm",
+    1: "both",
+    2: "vocal",
+    }
+
+    BGN_LABELS = {
+    0: "Clean",
+    1: "Noise",
+    }
+
+    return { "bgm": BGM_LABELS[np.argmax(has_bgm)], 
+             "bgn": BGN_LABELS[np.argmax(has_noise)]
+            }
+
 # PATCHWORK, LEVELS, BG MUSIC LEVEL
 import opensmile
 import datetime
 
 # PATCHWORK, LEVELS, BG MUSIC LEVEL
-def get_cross_corr(audio_file, segment_len = 1):
+def get_cross_corr(audio_file, segment_len = 2):
     # Load the audio file
     audio, sr = librosa.load(audio_file)
 
@@ -302,7 +434,7 @@ def calculate_differences(corr_vals, end_second = 10):
     
     return differences
 
-def catch_timestamps(differences, corr_values, timestamps, threshold=0.11):
+def catch_timestamps(differences, corr_values, timestamps, threshold=0.18):
     time_catch = {}
     for i, corr_val in enumerate(corr_values):
         if i == len(corr_values) -1 :
@@ -330,9 +462,9 @@ def get_audio_patchwork(video_inp):
 
     corr_values, timestamp = get_cross_corr(video_inp, segment_len=2)
 
-    diffs = calculate_differences(corr_vals=corr_values)
+    diffs = calculate_differences(corr_vals=corr_values/1e7)
 
-    time_range = catch_timestamps(differences=diffs, corr_values=corr_values, timestamps=timestamp)
+    time_range = catch_timestamps(differences=diffs, corr_values=corr_values/1e7, timestamps=timestamp)
 
     return time_range
 
@@ -349,14 +481,15 @@ def get_transcript_model(model=None):
     
     return whisper_model
 
-def get_audio_stats(audio_file, model = None, transcribe=True, calculate=True):
+def get_audio_stats(audio_file, model = None, calculate=True):
+    
+    save_transcript = st.session_state["save_transcript"]
     
     whisper_model = get_transcript_model()
     print("Whisper model loaded..")
 
     result = whisper_model.transcribe(audio_file)
-
-    if transcribe:
+    if save_transcript:
         print("Transcripting and Saving script..")
         with open(f"{st.session_state['vid_name']}_transcript.txt", "w+") as f:
             f.write("Video: " + st.session_state["vid_name"])

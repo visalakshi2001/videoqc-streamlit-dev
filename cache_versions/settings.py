@@ -6,7 +6,7 @@ def settings():
     st.markdown("<center><h3>Configurations</h3></center>", unsafe_allow_html=True)
 
     with st.form("settings_form"):
-        frame_rate = st.number_input("Set Video Frame Rate", value=30)
+        frame_rate = st.number_input("Set Video Frame Rate", value=30, help="Choose a value from 15, 30, 45; The more the value, the faster will be the execution")
 
         qc_cols = st.columns(2)
         with qc_cols[0]:
@@ -19,5 +19,6 @@ def settings():
     
     if applybtn:
         st.write(videoqc, audioqc, get_transcript, frame_rate)
-        st.session_state["get_transcript"] = get_transcript
+        st.session_state["save_transcript"] = get_transcript
+        st.session_state["frame_rate"] = frame_rate
     return

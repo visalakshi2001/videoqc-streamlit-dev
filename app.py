@@ -20,7 +20,7 @@ def start_app(pages: list, page: str):
     main, setting_tab = st.tabs(["Main", "Settings"])
     
     with main:
-        if page == pages[1]:
+        if page == "Single Video processing":
             infobtn = info_form(1)
             if infobtn:
                 # set_process_initiation(True)
@@ -29,7 +29,7 @@ def start_app(pages: list, page: str):
 
             if st.session_state["start"]:
                 single_processing()
-        elif page == pages[2]:
+        elif page == "Batch processing":
             start = info_form(2)
             if start:
                 st.session_state["stop"] = False
@@ -45,12 +45,14 @@ def start_app(pages: list, page: str):
                 if flag != 0:
                     st.write(hash)
 
-        elif page == pages[3]:
+        elif page == "AudioQC":
             audio_processing()
     
     with setting_tab:
         if "get_transcript" not in st.session_state:
             st.session_state["get_transcript"] = False
+        if "frame_rate" not in st.session_state:
+            st.session_state["frame_rate"] = 15
         settings()
 
 def sidebar(pages):
@@ -91,6 +93,8 @@ def info_form(state=1):
         st.session_state["start"] = False
     if "stop" not in st.session_state:
         st.session_state["stop"] = False
+    if "save_transcript" not in st.session_state:
+        st.session_state["save_transcript"] = False
 
 
     with st.form("info_input_form"):
@@ -123,7 +127,11 @@ def info_form(state=1):
 
 if __name__ == "__main__":
 
-    pages = ["ScriptQC", "Single Video processing", "Batch processing", "AudioQC"]
+    pages = [
+        # "ScriptQC", 
+        "Single Video processing", "Batch processing", 
+        # "AudioQC"
+        ]
     
 
     page = sidebar(pages)

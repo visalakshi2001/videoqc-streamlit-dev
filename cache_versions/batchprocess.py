@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 import time
 import pandas as pd
-from stqdm import stqdm
+# from stqdm import stqdm
 from tqdm import tqdm
 import tempfile
 from videoparser import extract_frames_main
@@ -15,7 +15,7 @@ from cache_versions.singleapp import run_video_qc_test_single
 def batch_processing():
 
     # # to view the progress of app
-    st.write(st.session_state)
+    # st.write(st.session_state)
 
     st.markdown("<center><h3>Batch Video Processing</h3></center>", unsafe_allow_html=True)
     
@@ -54,6 +54,8 @@ def batch_processing():
         st.session_state["hash"] = {}
     if "checkpoint" not in st.session_state:
         st.session_state["checkpoint"] = pd.DataFrame()
+    if "expander_object" not in st.session_state:
+        st.session_state["expander_object"] = None
     
     flag = st.session_state["flag"]
 
@@ -98,7 +100,9 @@ def batch_processing():
             vid_name = video.split("\\")[-1].split(".mp4")[0]
             st.session_state["vid_name"] = vid_name
 
-            st.success("📂📁" + video + " Is being parsed... ⏬", icon="📢")
+            # st.success("📂📁" + video + " Is being parsed... ⏬", icon="📢")
+            expander_object = st.expander(("📢  📂📁 " + video + " Is being parsed... ⏬"))
+            st.session_state["expander_object"] = expander_object
             
             ##########################
 

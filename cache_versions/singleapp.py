@@ -8,7 +8,7 @@ import tempfile
 from videoparser import extract_frames_main
 from tests import (detect_logo_position, predict_ethnicity_from_image, 
                     get_ost_font_type, predict_accent, get_audio_patchwork,
-                    get_audio_stats)
+                    get_audio_stats, detect_noise_and_background)
 
 
 
@@ -72,10 +72,6 @@ def insert_data(dataframe,  duration,  qc_pnt, type, remarks=""):
 # https://docs.streamlit.io/library/advanced-features/st.cache
 @st.cache(suppress_st_warning=True)
 def run_video_qc_test_single(input_video):
-    
-
-    result, complexity_scale, stat_dict = get_audio_stats(input_video)
-
 
     
     # extract 
@@ -86,12 +82,7 @@ def run_video_qc_test_single(input_video):
 
     data = pd.DataFrame(columns = ["Session No", "Topic Name", "Duration", "Developed by", "Reported by",
                                     "Date", "QCPoint", "Type", "remarks", "Path"])
-    
-    time_range = get_audio_patchwork(input_video)
-    
-    for start, end in zip(time_range.keys(), time_range.values()):
-        st.write(f"Audio unleveled from {start} to {end}")
-        data = insert_data(data, duration=start, qc_pnt="Audio unleveled", type="VO", remarks=f"Audio unleveled from {start} to {end}")
+    expander_object = st.session_state["expander_object"]
 
     for idx, frame in enumerate(glob("./image_frames/*.jpg")):
         timestamp = frame.split("\\")[-1].split(".jpg")[0].split("frame")[1]
@@ -108,28 +99,66 @@ def run_video_qc_test_single(input_video):
 
             with st.spinner("Testing Audio Quality..."):
                 acc, power = predict_accent(input_video)
+                bgm_bgn = detect_noise_and_background(input_video)
             st.info(f"The detected Voice over accent is {acc}, with intensity {power}")
+            st.info(f"The BG Music Status is {bgm_bgn['bgm']}  |  BG Noise Status is {bgm_bgn['bgn']}")
             if acc != "indian":
                 data = insert_data(data, duration=timestamp, qc_pnt=f"Accent is {acc}",type="VO", remarks=f"intensity is {power}")
                 # data.loc[len(data)] = [timestamp, f"Accent is {acc}", f"intensity is {power}"]
                 # data.reset_index(drop=True, inplace=True)
-            
-
+            if bgm_bgn["bgm"] != "both":
+                data = insert_data(data, duration=timestamp, qc_pnt=f"The BG Music has only {bgm_bgn['bgm']}",type="Audio", remarks=f"can be Audio Level issue")
+            if bgm_bgn["bgn"] != "Clean":
+                data = insert_data(data, duration=timestamp, qc_pnt=f"The BG is Noisy",type="Audio", remarks=f"can be Audio Level issue")
+                
         ethnicity = predict_ethnicity_from_image(frame)
-        fonttype = get_ost_font_type(frame)
+        ost_status = get_ost_font_type(frame)
 
-        if len(ethnicity):
-            ethnics = [eth["label"] for eth in ethnicity]
-            st.write(f"{timestamp}: Detected faces: {ethnics} | Font type: {fonttype}")
+        if ost_status != "no OST" or len(ethnicity):
+            # if ost
+            if ost_status != "no OST":
+                status = ost_status[2]
+                expander_object.write(f"{timestamp}: Font type: {ost_status[1]}  |  OST: {ost_status[0]}")
 
-            if set(ethnics).intersection(set(["black", "white", "asian", "others"])) != set():
-                data = insert_data(data, duration=timestamp, qc_pnt=f"Ethnicity detected: {ethnics}", type="Visual")
-                # data.loc[len(data)] = [timestamp, f"Ethnicity detected: {ethnics}", ""]
+                if (status["voice"] != "Active" or \
+                    status["spelling"] != "Good" or \
+                    status["hasuppersubord"] != False or \
+                    status["contains&"] != False or \
+                    status["orphan"] != False):
+                    data = insert_data(data, duration=timestamp, 
+                                       qc_pnt=f"{'Sentence Voice is Passive' if (status['voice'] == 'Passive') else ''} \
+                                            Spelling Condition: mispelled word{status['spelling']} \
+                                            {'Subordinate has Uppercase' if status['hasuppersubord'] else ''} \
+                                            {'Contains &' if status['contains&'] else ''} \
+                                            {'Contains Ophan word' if status['orphan'] else ''} ",
+                                        type="OST"
+                                        )
+                    
+                if ost_status[1] == "others":
+                    data = insert_data(data, duration=timestamp, qc_pnt=f"Font type: {ost_status[1]}", type="Visual")
+                # data.loc[len(data)] = [timestamp, f"Font type: {fonttype}", ""]
+
+            # if ethnicity
+            if len(ethnicity):
+                ethnics = [eth["label"] for eth in ethnicity]
+                expander_object.write(f"{timestamp}: Detected faces: {ethnics}")
+            
+                if set(ethnics).intersection(set(["black", "white", "asian", "others"])) != set():
+                    data = insert_data(data, duration=timestamp, qc_pnt=f"Ethnicity detected: {ethnics}", type="Visual")
+                    # data.loc[len(data)] = [timestamp, f"Ethnicity detected: {ethnics}", ""]
+
         else:
-            st.write(f"{timestamp}: Font type: {fonttype}")
+            expander_object.write(f"{timestamp}: No QC Point")
+        
+    # Extract Audio status
+    time_range = get_audio_patchwork(input_video)
+    
+    for start, end in zip(time_range.keys(), time_range.values()):
+        expander_object.write(f"Audio unleveled from {start} to {end}")
+        data = insert_data(data, duration=start, qc_pnt="Audio unleveled", type="VO", remarks=f"Audio unleveled from {start} to {end}")
 
-        if fonttype == "others":
-            data = insert_data(data, duration=timestamp, qc_pnt=f"Font type: {fonttype}", type="Visual")
-            # data.loc[len(data)] = [timestamp, f"Font type: {fonttype}", ""]
+    result, complexity_scale, stat_dict = get_audio_stats(input_video) 
+        
+        
         
     return data

@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from datetime import timedelta
 from pathlib import Path
+import streamlit as st
 
 def format_timedelta(td):
     """Utility function to format timedelta objects in a cool way (e.g 00:00:20.05) 
@@ -27,8 +28,8 @@ def get_saving_frames_durations(cap, saving_fps):
         s.append(i)
     return s
 
-
-def extract_frames_main(video_file, storage_path:str = "./", SAVING_FRAMES_PER_SECOND = 30):
+@st.cache(suppress_st_warning=True)
+def extract_frames_main(video_file, storage_path:str = "./", SAVING_FRAMES_PER_SECOND = 15):
 
     storage_path = os.path.join(storage_path, "image_frames/")
     if not os.path.exists(storage_path):
@@ -42,7 +43,10 @@ def extract_frames_main(video_file, storage_path:str = "./", SAVING_FRAMES_PER_S
     # get the FPS of the video
     frameRate = test_video.get(cv2.CAP_PROP_FPS)
     # if the SAVING_FRAMES_PER_SECOND is above video FPS, then set it to FPS (as maximum)
-    saving_frames_per_second = min(frameRate, SAVING_FRAMES_PER_SECOND)
+    if st.session_state["frame_rate"] != 15:
+        saving_frames_per_second = min(frameRate, SAVING_FRAMES_PER_SECOND)
+    else:
+        saving_frames_per_second = 15
     
     # get the list of duration spots to save
     saving_frames_durations = get_saving_frames_durations(cap=test_video, saving_fps=saving_frames_per_second)
