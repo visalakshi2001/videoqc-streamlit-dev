@@ -30,7 +30,8 @@ def single_processing():
         tfile = tempfile.NamedTemporaryFile(delete=False)
         tfile.write(uploaded.read())
         
-
+        expander_object = st.expander(("📢  📂📁 " + uploaded.name + " Is being parsed... ⏬"))
+        st.session_state["expander_object"] = expander_object
         data = run_video_qc_test_single(tfile.name)
         
         buffer = io.BytesIO()
@@ -41,12 +42,15 @@ def single_processing():
             # Close the Pandas Excel writer and output the Excel file to the buffer
             writer.save()
 
-            st.download_button(
+            st.download_button (
             label="Download Excel QCSheet",
             data=buffer,
             file_name="qcreport.xlsx",
             mime="application/vnd.ms-excel"
             )
+
+            st.session_state["stop"] = True
+            st.session_state["start"] = False
         
 
 
@@ -86,31 +90,32 @@ def run_video_qc_test_single(input_video):
 
     for idx, frame in enumerate(glob("./image_frames/*.jpg")):
         timestamp = frame.split("\\")[-1].split(".jpg")[0].split("frame")[1]
-
+        timestamp = timestamp.replace(".", ":").replace("-", ":")[2:]
         if idx == 0:
-            diff, conf = detect_logo_position(frame)
-            st.write(f"Logo detected: confidence score {conf.item()}")
-            if abs(diff) < 4:
-                st.info("Logo position is standard")
-            else:
-                st.warning("Logo position is Off (not standard)")
-                data = insert_data(data, duration=timestamp, qc_pnt="Logo off", type="Visual", remarks=f"logo off by {diff}")
-                # data.loc[len(data)] = [timestamp, "Logo off", f"logo off by {diff}"]
+            try:
+                diff, conf = detect_logo_position(frame)
+                st.write(f"Logo detected: confidence score {conf.item()}")
+                if abs(diff) < 4:
+                    st.info("Logo position is standard")
+                else:
+                    st.warning("Logo position is Off (not standard)")
+                    data = insert_data(data, duration=timestamp, qc_pnt="Logo off", type="Visual", remarks=f"logo off by {diff}")
+            except:
+                try:
+                    frame = glob("./image_frames/*.jpg")[idx+2]
+                    diff, conf = detect_logo_position(frame)
+                    st.write(f"Logo detected: confidence score {conf.item()}")
+                    if abs(diff) < 4:
+                        st.info("Logo position is standard")
+                    else:
+                        st.warning("Logo position is Off (not standard)")
+                        data = insert_data(data, duration=timestamp, qc_pnt="Logo off", type="Visual", remarks=f"logo off by {diff}")
+                except:
+                    st.warning("Logo missing!")
+                    data = insert_data(data, duration=timestamp, qc_pnt="Logo missing", type="Visual", remarks=f"logo missing")
 
-            with st.spinner("Testing Audio Quality..."):
-                acc, power = predict_accent(input_video)
-                bgm_bgn = detect_noise_and_background(input_video)
-            st.info(f"The detected Voice over accent is {acc}, with intensity {power}")
-            st.info(f"The BG Music Status is {bgm_bgn['bgm']}  |  BG Noise Status is {bgm_bgn['bgn']}")
-            if acc != "indian":
-                data = insert_data(data, duration=timestamp, qc_pnt=f"Accent is {acc}",type="VO", remarks=f"intensity is {power}")
-                # data.loc[len(data)] = [timestamp, f"Accent is {acc}", f"intensity is {power}"]
-                # data.reset_index(drop=True, inplace=True)
-            if bgm_bgn["bgm"] != "both":
-                data = insert_data(data, duration=timestamp, qc_pnt=f"The BG Music has only {bgm_bgn['bgm']}",type="Audio", remarks=f"can be Audio Level issue")
-            if bgm_bgn["bgn"] != "Clean":
-                data = insert_data(data, duration=timestamp, qc_pnt=f"The BG is Noisy",type="Audio", remarks=f"can be Audio Level issue")
-                
+
+
         ethnicity = predict_ethnicity_from_image(frame)
         ost_status = get_ost_font_type(frame)
 
@@ -120,19 +125,20 @@ def run_video_qc_test_single(input_video):
                 status = ost_status[2]
                 expander_object.write(f"{timestamp}: Font type: {ost_status[1]}  |  OST: {ost_status[0]}")
 
-                if (status["voice"] != "Active" or \
-                    status["spelling"] != "Good" or \
-                    status["hasuppersubord"] != False or \
-                    status["contains&"] != False or \
-                    status["orphan"] != False):
-                    data = insert_data(data, duration=timestamp, 
-                                       qc_pnt=f"{'Sentence Voice is Passive' if (status['voice'] == 'Passive') else ''} \
-                                            Spelling Condition: mispelled word{status['spelling']} \
-                                            {'Subordinate has Uppercase' if status['hasuppersubord'] else ''} \
-                                            {'Contains &' if status['contains&'] else ''} \
-                                            {'Contains Ophan word' if status['orphan'] else ''} ",
-                                        type="OST"
-                                        )
+                ost_error_text = ""
+                if status["voice"] != "Active":
+                    ost_error_text = ost_error_text + " " + "Sentence Voice is Passive"
+                if status["spelling"] != "Good":
+                    ost_error_text = ost_error_text + " " + f"mispelled word {status['spelling']}"
+                if status["hasuppersubord"] != False:
+                    ost_error_text = ost_error_text + " " + 'Subordinate has Uppercase'
+                if status["contains&"] != False:
+                    ost_error_text = ost_error_text + " " + 'Contains &'
+                if status["orphan"] != False:
+                    ost_error_text = ost_error_text + " " + 'Contains Ophan word'
+                
+                if ost_error_text !="":
+                    data = insert_data(data, duration=timestamp, qc_pnt=ost_error_text, type="OST")
                     
                 if ost_status[1] == "others":
                     data = insert_data(data, duration=timestamp, qc_pnt=f"Font type: {ost_status[1]}", type="Visual")
@@ -149,16 +155,36 @@ def run_video_qc_test_single(input_video):
 
         else:
             expander_object.write(f"{timestamp}: No QC Point")
-        
-    # Extract Audio status
-    time_range = get_audio_patchwork(input_video)
     
-    for start, end in zip(time_range.keys(), time_range.values()):
-        expander_object.write(f"Audio unleveled from {start} to {end}")
-        data = insert_data(data, duration=start, qc_pnt="Audio unleveled", type="VO", remarks=f"Audio unleveled from {start} to {end}")
+    if st.session_state["do_audioqc"]:
+        # Extract Audio status
+        time_range = get_audio_patchwork(input_video)
+        
+        for start, end in zip(time_range.keys(), time_range.values()):
+            expander_object.write(f"Audio unleveled from {start} to {end}")
+            data = insert_data(data, duration=start, qc_pnt="Audio unleveled", type="VO", remarks=f"Audio unleveled from {start} to {end}")
 
-    result, complexity_scale, stat_dict = get_audio_stats(input_video) 
+        result, complexity_scale, stat_dict = get_audio_stats(input_video)
+
+        expander_object.info(f" PACE: {stat_dict['Pace (WPM)']}  |  Lexical Complexity: {stat_dict['Lexical Complexity Score']}  |  Apparent Difficult words: {stat_dict['Difficult words']}")
+        if stat_dict["Pace (WPM)"] > 185:
+            data = insert_data(data, duration="0:00:00", qc_pnt="Pace too fast", type="VO", remarks=f"Pace of VO is {stat_dict['Pace (WPM)']}")
+        if stat_dict["Lexical Complexity Score"] < 6 or stat_dict["Lexical Complexity Score"] > 8:
+            data = insert_data(data, duration="0:00:00", qc_pnt="Language difficulty exists", type="VO", remarks=f"Lexical Complexity is is {stat_dict['Lexical Complexity Score']}")
+            data = insert_data(data, duration="0:00:00", qc_pnt=f"Apparent Difficult words: {stat_dict['Difficult words']}", type="VO", remarks=f"In case the words are not subjectively difficult, ignore this error.")
         
-        
-        
+        with st.spinner("Testing Audio Quality..."):
+                acc, power = predict_accent(input_video)
+                bgm_bgn = detect_noise_and_background(input_video)
+                expander_object.info(f"The detected Voice over accent is {acc}, with intensity {power}")
+                st.info(f"The BG Music Status is {bgm_bgn['bgm']} ") # |  BG Noise Status is {bgm_bgn['bgn']}
+                if acc != "indian":
+                    if power > 70:
+                        data = insert_data(data, duration=timestamp, qc_pnt=f"Accent is {acc}",type="VO", remarks=f"intensity is {power}")
+                if bgm_bgn["bgm"] != "both":
+                    data = insert_data(data, duration=timestamp, qc_pnt=f"The BG Music has only {bgm_bgn['bgm']}",type="Audio", remarks=f"can be Audio Level issue")
+        #         if bgm_bgn["bgn"] != "Clean":
+        #             data = insert_data(data, duration=timestamp, qc_pnt=f"The BG is Noisy",type="Audio", remarks=f"can be Audio Level issue")
+            
+    
     return data

@@ -54,8 +54,6 @@ def batch_processing():
         st.session_state["hash"] = {}
     if "checkpoint" not in st.session_state:
         st.session_state["checkpoint"] = pd.DataFrame()
-    if "expander_object" not in st.session_state:
-        st.session_state["expander_object"] = None
     
     flag = st.session_state["flag"]
 
@@ -136,6 +134,8 @@ def batch_processing():
             file_name="qcreport.xlsx",
             mime="application/vnd.ms-excel"
             )
+            st.session_state["stop"] = True
+            st.session_state["start"] = False
 
     return stop
 

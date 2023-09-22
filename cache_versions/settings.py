@@ -10,15 +10,16 @@ def settings():
 
         qc_cols = st.columns(2)
         with qc_cols[0]:
-            videoqc = st.checkbox("Video", value=1)
-            audioqc = st.checkbox("Audio", value=1)
+            # do_videoqc = st.checkbox("Video", value=1)
+            do_audioqc = st.checkbox("Include AudioQC with VideoQC Bulk Processing", value=1)
         with qc_cols[1]:
             get_transcript = st.checkbox("📋 Get transcript after QC", value = st.session_state["get_transcript"])
         
         applybtn = st.form_submit_button("Apply")
     
     if applybtn:
-        st.write(videoqc, audioqc, get_transcript, frame_rate)
+        st.write(do_audioqc, get_transcript, frame_rate)
         st.session_state["save_transcript"] = get_transcript
         st.session_state["frame_rate"] = frame_rate
+        st.session_state["do_audioqc"] = do_audioqc
     return

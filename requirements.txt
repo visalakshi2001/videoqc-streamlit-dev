@@ -6,11 +6,12 @@ mtcnn==0.1.1
 
 opencv-python==4.7.0.72
 openpyxl==3.1.1
-# textblob
-# nltk
-# pytesseract
-# opensmile
-# textstat
+textblob
+nltk
+pytesseract
+opensmile
+textstat
+textblob
 pydub==0.25.1
 librosa>=0.10.0
 # spacy==2.3.9
@@ -22,6 +23,8 @@ torchaudio==0.13.1
 torchvision==0.14.1
 transformers==4.27.4
 ultralytics==8.0.51
-whisper @ git+https://github.com/openai/whisper.git@8cf36f3508c9acd341a45eb2364239a3d81458b9
-# Werkzeug==2.2.3
+openai-whisper==20230124
 XlsxWriter==3.0.8
+
+# https://github.com/MouseLand/cellpose/issues/432 (LLVM ERROR Symbol not found: __svml_cosf8_ha)
+# https://github.com/facebookresearch/audiocraft/issues/61 ''

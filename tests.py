@@ -89,6 +89,12 @@ def predict_ethnicity_from_image(img_inp):
         label = rev_labels(np.argmax(y_hat))
         face["label"] = label
     # draw_image_with_boxes(img_path, faces)
+        if label == 'black':
+            max_proba = max(y_hat[0])
+            if not max_proba > 0.92:
+                face["label"] = 'indian'
+            
+    
     return faces
 
 # LOGO DETECTION
@@ -154,8 +160,14 @@ def detect_text_error(ost):
     print("Checking voice of the sentence")
     nlp = spacy.load("en_core_web_sm")
     matcher = Matcher(nlp.vocab)
-    passive_rule = [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBN'}]
-    matcher.add('Passive', [passive_rule])
+    passive_rules = [    
+        # [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBN'}]
+        [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBN'}],
+        [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBZ'}],
+        [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'RB'}, {'TAG': 'VBN'}],
+
+    ]
+    matcher.add('Passive', passive_rules)
 
     doc = nlp(ost)
     matches = matcher(doc)
@@ -204,20 +216,22 @@ def detect_text_error(ost):
 # FONT DETECTION
 @st.cache(suppress_st_warning=True, allow_output_mutation=True)
 def getFontModel():
-    model = Sequential()
-    model.add(Conv2D(16, (3,3), 1, activation='relu', input_shape=(256,256,3)))
-    model.add(MaxPooling2D())
-    model.add(Conv2D(32, (3,3), 1, activation='relu'))
-    model.add(MaxPooling2D())
-    model.add(Conv2D(16, (3,3), 1, activation='relu'))
-    model.add(MaxPooling2D())
-    model.add(Flatten())
-    model.add(Dense(256, activation='relu'))
-    model.add(Dense(1, activation='sigmoid'))
+    # model = Sequential()
+    # model.add(Conv2D(16, (3,3), 1, activation='relu', input_shape=(256,256,3)))
+    # model.add(MaxPooling2D())
+    # model.add(Conv2D(32, (3,3), 1, activation='relu'))
+    # model.add(MaxPooling2D())
+    # model.add(Conv2D(16, (3,3), 1, activation='relu'))
+    # model.add(MaxPooling2D())
+    # model.add(Flatten())
+    # model.add(Dense(256, activation='relu'))
+    # model.add(Dense(1, activation='sigmoid'))
 
-    model.compile('adam', loss=tf.losses.BinaryCrossentropy(), metrics=['accuracy'])
+    # model.compile('adam', loss=tf.losses.BinaryCrossentropy(), metrics=['accuracy'])
 
-    model.load_weights("models/fontclassifierweights.hdf5")
+    # model.load_weights("models/fontclassifierweights.hdf5")
+
+    model = load_model("models/fontclassifier.h5", compile=False)
 
     return model
 
@@ -243,25 +257,24 @@ def get_ost_font_type(img_inp):
                 ocr_text = ocr_text + " " + pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
 
             except:
-                pad = 0
-                ocr_text = ocr_text + " " + pytesseract.image_to_string(image[y1:y2, x1-pad:x2+pad])
+                ocr_text = ocr_text + " " + pytesseract.image_to_string(image[y1:y2, x1:x2])
         
         ocr_text = ocr_text.strip()
         ocr_text = ocr_text.strip("\n")
-        ocr_text = ocr_text.rstrip("}{)(-").strip()
+        ocr_text = ocr_text.rstrip("_|}{)(-&").strip().rstrip("_|}{)(-&").strip()
         
         if ocr_text != "":
             status = detect_text_error(ocr_text)
         
-            image = tf.image.resize(image, [256, 256])
+            image = tf.image.resize(image[y1:y2, x1:x2], [256, 256])
             yhat = font_model.predict(np.expand_dims(image/255, 0))
 
             print(img_inp, yhat)
-
+            print(yhat[0][0])
             fonttype = ""
-            if yhat >= 0.5:
+            if yhat[0][0] >= 0.50:
                 fonttype = "segoeui"
-            elif yhat >= 0.3 and yhat < 0.5:
+            elif yhat[0][0] >= 0.3 and yhat[0][0] < 0.50:
                 fonttype = "others"
             else:
                 return (ocr_text, "None, This is only BG Text", status)
@@ -336,6 +349,10 @@ def predict_accent(video_inp):
 
 
 # DETECT BGMUSIC AND BGNOISE
+
+def split_audio():
+    pass
+
 def extract_features(audio_data):
     series, sr = librosa.load(audio_data)
     # Extract Mel-frequency cepstral coefficients (MFCCs)
@@ -451,9 +468,9 @@ def catch_timestamps(differences, corr_values, timestamps, threshold=0.18):
     for start, ends in zip(time_catch.keys(), time_catch.values()):
 
         if ends != []:
-            s = str(datetime.timedelta(seconds=int(start)))[-5:]
+            s = str(datetime.timedelta(seconds=int(start)))
             end = max(ends)
-            e = str(datetime.timedelta(seconds=int(start + end)))[-5:]
+            e = str(datetime.timedelta(seconds=int(start + end)))
             # print(s, "--", e)
             time_range[s] = e
     return time_range
@@ -511,3 +528,149 @@ def get_audio_stats(audio_file, model = None, calculate=True):
     }
 
     return result, complexity_scale, stat_dict
+
+
+# SCRIPTQC TESTS
+import requests
+import json
+
+from gramformer import Gramformer
+from docx import Document
+from nltk.tokenize import sent_tokenize
+
+# SCRIPTQC TESTS
+@st.cache(suppress_st_warning=True, allow_output_mutation=True)
+def load_grammar_model():
+    grammar_correction = Gramformer(models = 1, use_gpu=False)
+    print("Grammar model loaded")
+
+    return grammar_correction
+
+def read_files(filepath):
+
+    print("file received")
+    
+    text = []
+    doc = Document(filepath)
+
+    for para in doc.paragraphs:
+        if para.text != "":
+            text.append(para.text.strip())
+    return text
+
+def check_plag(input_text):
+
+    print("checking plagiarism...")
+
+    text_to_check = input_text
+
+    plag_stat = []
+
+    if len(input_text.split()) > 15:
+
+        stat = {}
+
+        burp0_url = "https://papersowl.com:443/plagiarism-checker-send-data"
+
+        burp0_cookies = {"PHPSESSID": "qjc72e3vvacbtn4jd1af1k5qn1", "first_interaction_user": "%7B%22referrer%22%3A%22https%3A%5C%2F%5C%2Fwww.google.com%5C%2F%22%2C%22internal_url%22%3A%22%5C%2Ffree-plagiarism-checker%22%2C%22utm_source%22%3Anull%2C%22utm_medium%22%3Anull%2C%22utm_campaign%22%3Anull%2C%22utm_content%22%3Anull%2C%22utm_term%22%3Anull%2C%22gclid%22%3Anull%2C%22msclkid%22%3Anull%2C%22adgroupid%22%3Anull%2C%22targetid%22%3Anull%2C%22appsflyer_id%22%3Anull%2C%22appsflyer_cuid%22%3Anull%2C%22cta_btn%22%3Anull%7D", "first_interaction_order": "%7B%22referrer%22%3A%22https%3A%5C%2F%5C%2Fwww.google.com%5C%2F%22%2C%22internal_url%22%3A%22%5C%2Ffree-plagiarism-checker%22%2C%22utm_source%22%3Anull%2C%22utm_medium%22%3Anull%2C%22utm_campaign%22%3Anull%2C%22utm_content%22%3Anull%2C%22utm_term%22%3Anull%2C%22gclid%22%3Anull%2C%22msclkid%22%3Anull%2C%22adgroupid%22%3Anull%2C%22targetid%22%3Anull%2C%22appsflyer_id%22%3Anull%2C%22appsflyer_cuid%22%3Anull%2C%22cta_btn%22%3Anull%7D", "affiliate_user": "a%3A3%3A%7Bs%3A9%3A%22affiliate%22%3Bs%3A9%3A%22papersowl%22%3Bs%3A6%3A%22medium%22%3Bs%3A9%3A%22papersowl%22%3Bs%3A8%3A%22campaign%22%3Bs%3A9%3A%22papersowl%22%3B%7D", "sbjs_migrations": "1418474375998%3D1", "sbjs_current_add": "fd%3D2022-05-24%2019%3A01%3A22%7C%7C%7Cep%3Dhttps%3A%2F%2Fpapersowl.com%2Ffree-plagiarism-checker%7C%7C%7Crf%3Dhttps%3A%2F%2Fwww.google.com%2F", "sbjs_first_add": "fd%3D2022-05-24%2019%3A01%3A22%7C%7C%7Cep%3Dhttps%3A%2F%2Fpapersowl.com%2Ffree-plagiarism-checker%7C%7C%7Crf%3Dhttps%3A%2F%2Fwww.google.com%2F", "sbjs_current": "typ%3Dorganic%7C%7C%7Csrc%3Dgoogle%7C%7C%7Cmdm%3Dorganic%7C%7C%7Ccmp%3D%28none%29%7C%7C%7Ccnt%3D%28none%29%7C%7C%7Ctrm%3D%28none%29", "sbjs_first": "typ%3Dorganic%7C%7C%7Csrc%3Dgoogle%7C%7C%7Cmdm%3Dorganic%7C%7C%7Ccmp%3D%28none%29%7C%7C%7Ccnt%3D%28none%29%7C%7C%7Ctrm%3D%28none%29", "sbjs_udata": "vst%3D1%7C%7C%7Cuip%3D%28none%29%7C%7C%7Cuag%3DMozilla%2F5.0%20%28Windows%20NT%206.3%3B%20Win64%3B%20x64%3B%20rv%3A100.0%29%20Gecko%2F20100101%20Firefox%2F100.0", "sbjs_session": "pgs%3D1%7C%7C%7Ccpg%3Dhttps%3A%2F%2Fpapersowl.com%2Ffree-plagiarism-checker", "_ga_788D7MTZB4": "GS1.1.1653411683.1.0.1653411683.0", "_ga": "GA1.1.1828699233.1653411683", "trustedsite_visit": "1", "trustedsite_tm_float_seen": "1", "AppleBannercookie_hide_header_banner": "1", "COOKIE_PLAGIARISM_CHECKER_TERMS": "1", "plagiarism_checker_progress_state": "1"}
+
+        burp0_headers = {"User-Agent": "Mozilla/5.0 (Windows NT 6.3; Win64; x64; rv:100.0) Gecko/20100101 Firefox/100.0", "Accept": "*/*", "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3", "Accept-Encoding": "gzip, deflate", "Referer": "https://papersowl.com/free-plagiarism-checker", "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "X-Requested-With": "XMLHttpRequest", "Origin": "https://papersowl.com", "Dnt": "1", "Sec-Fetch-Dest": "empty", "Sec-Fetch-Mode": "no-cors", "Sec-Fetch-Site": "same-origin", "Pragma": "no-cache", "Cache-Control": "no-cache", "Te": "trailers", "Connection": "close"}
+
+        burp0_data = {"is_free": "false", "plagchecker_locale": "en", "product_paper_type": "1", "title": '', "text": str(text_to_check)}
+
+        r = requests.post(burp0_url, headers=burp0_headers, cookies=burp0_cookies, data=burp0_data)
+
+        result = json.loads(r.text)
+
+        stat["text"] = input_text
+        stat["plagiarism"] = str(result["words_count"]) + "%"
+        stat["matches"] = result["matches"]
+
+        plag_stat.append(stat)
+    
+    print("plagiarism check complete")
+
+    return plag_stat
+
+def check_gram_spell_length(input_text):
+
+    print("checking grammar")
+
+    grammar_correction = load_grammar_model()
+    print(grammar_correction)
+    print("Using cached version above")
+    
+    error_texts = []
+    for para in input_text:
+        sents = para.split(".")
+        for sent in sents:
+            err = {}
+            if not sent.endswith("?") and len(sent.split()) > 4:
+                sent = sent + "."
+                correct = grammar_correction.correct(sent, max_candidates=1)
+                if list(correct)[0] != sent:
+                    edits = grammar_correction.get_edits(sent, list(correct)[0])
+                    if edits != []:
+                        err["err"]: sent
+                        err["corr"]: correct
+
+                pass_check = check_passive(sent)
+                if pass_check == "Passive":
+                    err["is_pass"] = sent
+                
+                if len(sent.split()) > 15:
+                    err["sent_length"] = sent
+
+                if err != {}:
+                    error_texts.append(err)
+
+
+    print("grammar check complete")
+    return error_texts
+
+@st.cache(suppress_st_warning=True)
+def check_passive(input_text):
+
+    nlp = spacy.load("en_core_web_sm")
+    matcher = Matcher(nlp.vocab)
+    # passive_rule = [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBN'}]
+    passive_rules = [
+        [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBN'}],
+        [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'VBZ'}],
+        [{'DEP': 'nsubjpass'}, {'DEP': 'aux', 'OP': '*'}, {'DEP': 'auxpass'}, {'TAG': 'RB'}, {'TAG': 'VBN'}],
+
+    ]
+    matcher.add('Passive', passive_rules)
+
+    doc = nlp(input_text)
+    matches = matcher(doc)
+    if len(matches) > 0:
+        return "Passive"
+    else:
+        return "Active"
+
+
+
+
+def check_scripts(script_path):
+
+    data = {"plag": [], "gram": [], "words": 0, "sents": 0}
+
+    text = read_files(script_path)
+
+    for para in text:
+        stat = check_plag(para)
+    
+    data["plag"] = stat
+
+    err_text = check_gram_spell_length(text)
+
+    data["gram"] = err_text
+
+    # word_count = " ".join(text).split()
+    # data["words"] = len(word_count)
+
+    # sent_count = sent_tokenize(" ".join(text))
+    # data["sents"] = len(sent_count)
+
+    return data
